@@ -55,7 +55,7 @@ class RecipeAdmin(admin.ModelAdmin):
     )
 
     def get_queryset(self, request):
-        """Оптимизация запросов с аннотацией количества добавлений в избранное."""
+        """Оптимизация запросов"""
         queryset = super().get_queryset(request)
         return queryset.select_related("author").annotate(
             favorites_count=Count("favorites")
