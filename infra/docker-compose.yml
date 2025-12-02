@@ -26,8 +26,6 @@ services:
                 condition: service_healthy
         env_file:
             - ../backend/.env
-        environment:
-            - POSTGRES_HOST=db
 
     frontend:
         build: ../frontend
