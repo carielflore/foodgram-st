@@ -1,5 +1,5 @@
 """
-URL configuration for API application.
+URL конфигурация.
 """
 
 from django.urls import include, path

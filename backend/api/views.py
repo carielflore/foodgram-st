@@ -5,11 +5,10 @@
 from django.contrib.auth import get_user_model
 from django.db.models import Sum
 from django.http import HttpResponse
-from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
 from djoser.views import UserViewSet as DjoserUserViewSet
 from recipes.models import Favorite, Ingredient, Recipe, ShoppingCart
-from rest_framework import filters, status, viewsets
+from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -52,8 +51,6 @@ class CustomUserViewSet(DjoserUserViewSet):
     def me(self, request):
         """
         Получить информацию о текущем пользователе.
-
-        Переопределяет стандартное действие Djoser для явной проверки аутентификации.
         """
         serializer = self.get_serializer(request.user)
         return Response(serializer.data, status=status.HTTP_200_OK)
@@ -81,7 +78,9 @@ class CustomUserViewSet(DjoserUserViewSet):
             response_serializer = SetAvatarResponseSerializer(
                 user, context={"request": request}
             )
-            return Response(response_serializer.data, status=status.HTTP_200_OK)
+            return Response(
+                response_serializer.data, status=status.HTTP_200_OK
+            )
 
         if request.method == "DELETE":
             if user.avatar:
@@ -96,11 +95,9 @@ class CustomUserViewSet(DjoserUserViewSet):
     def subscriptions(self, request):
         """
         Получить список подписок текущего пользователя.
-
-        Возвращает пагинированный список авторов, на которых подписан пользователь.
         """
         user = request.user
-        subscriptions = Subscription.objects.filter(user=user)
+        subscriptions = user.subscriptions.all()
         authors = User.objects.filter(
             id__in=subscriptions.values_list("author_id", flat=True)
         )
@@ -142,7 +139,7 @@ class CustomUserViewSet(DjoserUserViewSet):
 
         if request.method == "POST":
             # Проверка существования подписки
-            if Subscription.objects.filter(user=user, author=author).exists():
+            if author.subscribers.filter(user=user).exists():
                 return Response(
                     {"errors": "Вы уже подписаны на этого автора."},
                     status=status.HTTP_400_BAD_REQUEST,
@@ -150,12 +147,14 @@ class CustomUserViewSet(DjoserUserViewSet):
 
             # Создание подписки
             Subscription.objects.create(user=user, author=author)
-            serializer = UserWithRecipesSerializer(author, context={"request": request})
+            serializer = UserWithRecipesSerializer(
+                author, context={"request": request}
+            )
             return Response(serializer.data, status=status.HTTP_201_CREATED)
 
         if request.method == "DELETE":
             # Проверка существования подписки
-            subscription = Subscription.objects.filter(user=user, author=author)
+            subscription = author.subscribers.filter(user=user)
             if not subscription.exists():
                 return Response(
                     {"errors": "Вы не подписаны на этого автора."},
@@ -239,9 +238,13 @@ class RecipeViewSet(viewsets.ModelViewSet):
             if is_favorited == "1":
                 queryset = queryset.filter(favorites__user=self.request.user)
 
-            is_in_shopping_cart = self.request.query_params.get("is_in_shopping_cart")
+            is_in_shopping_cart = self.request.query_params.get(
+                "is_in_shopping_cart"
+            )
             if is_in_shopping_cart == "1":
-                queryset = queryset.filter(shopping_cart__user=self.request.user)
+                queryset = queryset.filter(
+                    shopping_cart__user=self.request.user
+                )
 
         return queryset.distinct()
 
@@ -253,7 +256,9 @@ class RecipeViewSet(viewsets.ModelViewSet):
         Возвращает сокращённую ссылку вида https://example.com/s/{code}
         """
         recipe = self.get_object()
-        serializer = RecipeGetShortLinkSerializer(recipe, context={"request": request})
+        serializer = RecipeGetShortLinkSerializer(
+            recipe, context={"request": request}
+        )
         return Response(serializer.data)
 
     @action(
@@ -272,18 +277,20 @@ class RecipeViewSet(viewsets.ModelViewSet):
         user = request.user
 
         if request.method == "POST":
-            if Favorite.objects.filter(user=user, recipe=recipe).exists():
+            if recipe.favorites.filter(user=user).exists():
                 return Response(
                     {"errors": "Рецепт уже добавлен в избранное."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
             Favorite.objects.create(user=user, recipe=recipe)
-            serializer = RecipeMinifiedSerializer(recipe, context={"request": request})
+            serializer = RecipeMinifiedSerializer(
+                recipe, context={"request": request}
+            )
             return Response(serializer.data, status=status.HTTP_201_CREATED)
 
         if request.method == "DELETE":
-            favorite = Favorite.objects.filter(user=user, recipe=recipe)
+            favorite = recipe.favorites.filter(user=user)
             if not favorite.exists():
                 return Response(
                     {"errors": "Рецепт не найден в избранном."},
@@ -309,18 +316,20 @@ class RecipeViewSet(viewsets.ModelViewSet):
         user = request.user
 
         if request.method == "POST":
-            if ShoppingCart.objects.filter(user=user, recipe=recipe).exists():
+            if recipe.shopping_cart.filter(user=user).exists():
                 return Response(
                     {"errors": "Рецепт уже добавлен в список покупок."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
             ShoppingCart.objects.create(user=user, recipe=recipe)
-            serializer = RecipeMinifiedSerializer(recipe, context={"request": request})
+            serializer = RecipeMinifiedSerializer(
+                recipe, context={"request": request}
+            )
             return Response(serializer.data, status=status.HTTP_201_CREATED)
 
         if request.method == "DELETE":
-            shopping_cart = ShoppingCart.objects.filter(user=user, recipe=recipe)
+            shopping_cart = recipe.shopping_cart.filter(user=user)
             if not shopping_cart.exists():
                 return Response(
                     {"errors": "Рецепт не найден в списке покупок."},
@@ -345,8 +354,10 @@ class RecipeViewSet(viewsets.ModelViewSet):
         user = request.user
 
         # Получаем все рецепты из списка покупок
-        shopping_cart = ShoppingCart.objects.filter(user=user)
-        recipes = Recipe.objects.filter(id__in=shopping_cart.values("recipe_id"))
+        shopping_cart = user.shopping_cart.all()
+        recipes = Recipe.objects.filter(
+            id__in=shopping_cart.values("recipe_id")
+        )
 
         # Агрегируем ингредиенты
         ingredients = (
@@ -374,7 +385,10 @@ class RecipeViewSet(viewsets.ModelViewSet):
         content = "".join(lines)
 
         # Возвращаем как текстовый файл
-        response = HttpResponse(content, content_type="text/plain; charset=utf-8")
-        response["Content-Disposition"] = 'attachment; filename="shopping_list.txt"'
+        response = HttpResponse(
+            content, content_type="text/plain; charset=utf-8"
+        )
+        response["Content-Disposition"] = 'attachment;\
+             filename="shopping_list.txt"'
 
         return response

@@ -2,20 +2,21 @@
 Сериализаторы для API приложения.
 """
 
-import base64
+import string
 
 from django.contrib.auth import get_user_model
-from django.core.files.base import ContentFile
 from djoser.serializers import UserCreateSerializer, UserSerializer
 from recipes.models import (
-    Favorite,
+    MAX_COOKING_TIME,
+    MAX_INGREDIENT_AMOUNT,
+    MIN_COOKING_TIME,
+    MIN_INGREDIENT_AMOUNT,
     Ingredient,
     Recipe,
     RecipeIngredient,
-    ShoppingCart,
 )
+
 from rest_framework import serializers
-from users.models import Subscription
 
 from .fields import Base64ImageField
 
@@ -52,15 +53,12 @@ class CustomUserSerializer(UserSerializer):
     def get_is_subscribed(self, obj):
         """
         Проверяет, подписан ли текущий пользователь на данного автора.
-
-        Returns:
-            bool: True если подписан, False если нет или пользователь не авторизован
         """
         request = self.context.get("request")
         if not request or request.user.is_anonymous:
             return False
 
-        return Subscription.objects.filter(user=request.user, author=obj).exists()
+        return obj.subscribers.filter(user=request.user).exists()
 
     def get_avatar(self, obj):
         """
@@ -135,7 +133,8 @@ class SetAvatarSerializer(serializers.ModelSerializer):
     def validate_avatar(self, value):
         """Валидация аватара."""
         if not value:
-            raise serializers.ValidationError("Необходимо загрузить изображение.")
+            raise serializers.ValidationError("Необходимо загрузить\
+                 изображение.")
         return value
 
 
@@ -184,7 +183,9 @@ class RecipeIngredientSerializer(serializers.ModelSerializer):
 
     id = serializers.ReadOnlyField(source="ingredient.id")
     name = serializers.ReadOnlyField(source="ingredient.name")
-    measurement_unit = serializers.ReadOnlyField(source="ingredient.measurement_unit")
+    measurement_unit = serializers.ReadOnlyField(
+        source="ingredient.measurement_unit"
+    )
 
     class Meta:
         model = RecipeIngredient
@@ -201,7 +202,9 @@ class RecipeIngredientCreateSerializer(serializers.ModelSerializer):
     id = serializers.PrimaryKeyRelatedField(
         queryset=Ingredient.objects.all(), source="ingredient"
     )
-    amount = serializers.IntegerField(min_value=1)
+    amount = serializers.IntegerField(
+        min_value=MIN_INGREDIENT_AMOUNT, max_value=MAX_INGREDIENT_AMOUNT
+    )
 
     class Meta:
         model = RecipeIngredient
@@ -243,15 +246,15 @@ class RecipeListSerializer(serializers.ModelSerializer):
         if not request or request.user.is_anonymous:
             return False
 
-        return Favorite.objects.filter(user=request.user, recipe=obj).exists()
+        return obj.favorites.filter(user=request.user).exists()
 
     def get_is_in_shopping_cart(self, obj):
-        """Проверяет, добавлен ли рецепт в список покупок текущим пользователем."""
+        """Проверяет, добавлен ли рецепт в список покупок пользователем."""
         request = self.context.get("request")
         if not request or request.user.is_anonymous:
             return False
 
-        return ShoppingCart.objects.filter(user=request.user, recipe=obj).exists()
+        return obj.shopping_cart.filter(user=request.user).exists()
 
     def get_image(self, obj):
         """Возвращает полный URL изображения."""
@@ -273,7 +276,9 @@ class RecipeCreateSerializer(serializers.ModelSerializer):
     ingredients = RecipeIngredientCreateSerializer(many=True)
     image = Base64ImageField()
     author = CustomUserSerializer(read_only=True)
-    cooking_time = serializers.IntegerField(min_value=1)
+    cooking_time = serializers.IntegerField(
+        min_value=MIN_COOKING_TIME, max_value=MAX_COOKING_TIME
+    )
 
     class Meta:
         model = Recipe
@@ -303,7 +308,8 @@ class RecipeCreateSerializer(serializers.ModelSerializer):
         # Проверка на дубликаты
         ingredient_ids = [item["ingredient"].id for item in value]
         if len(ingredient_ids) != len(set(ingredient_ids)):
-            raise serializers.ValidationError("Ингредиенты не должны повторяться.")
+            raise serializers.ValidationError("Ингредиенты не должны\
+                 повторяться.")
 
         return value
 
@@ -449,7 +455,9 @@ class RecipeGetShortLinkSerializer(serializers.Serializer):
         Returns:
             str: Закодированная строка
         """
-        alphabet = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        alphabet = (
+            string.digits + string.ascii_lowercase + string.ascii_uppercase
+        )
         if num == 0:
             return alphabet[0]
 
@@ -473,7 +481,9 @@ class UserWithRecipesSerializer(CustomUserSerializer):
     recipes_count = serializers.SerializerMethodField()
 
     class Meta(CustomUserSerializer.Meta):
-        fields = CustomUserSerializer.Meta.fields + ("recipes", "recipes_count")
+        fields = CustomUserSerializer.Meta.fields + (
+            "recipes", "recipes_count"
+        )
 
     def get_recipes(self, obj):
         """
@@ -495,7 +505,9 @@ class UserWithRecipesSerializer(CustomUserSerializer):
             except (ValueError, TypeError):
                 pass
 
-        return RecipeMinifiedSerializer(recipes, many=True, context=self.context).data
+        return RecipeMinifiedSerializer(
+            recipes, many=True, context=self.context
+        ).data
 
     def get_recipes_count(self, obj):
         """Возвращает общее количество рецептов автора."""

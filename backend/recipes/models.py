@@ -3,16 +3,21 @@
 """
 
 from django.conf import settings
-from django.core.validators import MinValueValidator
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
+
+# Константы для валидации
+MIN_COOKING_TIME = 1
+MAX_COOKING_TIME = 32000
+MIN_INGREDIENT_AMOUNT = 1
+MAX_INGREDIENT_AMOUNT = 32000
 
 
 class Ingredient(models.Model):
     """
     Модель ингредиента.
 
-    Предустановленный список ингредиентов с единицами измерения.
-    Пользователи не могут создавать ингредиенты, только выбирают из существующих.
+    Предустановленный список ингредиентов с единицами измерения
     """
 
     name = models.CharField(
@@ -82,10 +87,17 @@ class Recipe(models.Model):
         help_text="Ингредиенты для приготовления блюда.",
     )
 
-    cooking_time = models.PositiveIntegerField(
+    cooking_time = models.PositiveSmallIntegerField(
         "Время приготовления",
         validators=[
-            MinValueValidator(1, message="Минимальное время приготовления - 1 минута")
+            MinValueValidator(
+                MIN_COOKING_TIME, message="Минимальное время \
+                    приготовления - 1 минута"
+            ),
+            MaxValueValidator(
+                MAX_COOKING_TIME,
+                message="Максимальное время приготовления - 32000 минут",
+            ),
         ],
         help_text="Время приготовления в минутах.",
     )
@@ -126,9 +138,17 @@ class RecipeIngredient(models.Model):
         verbose_name="Ингредиент",
     )
 
-    amount = models.PositiveIntegerField(
+    amount = models.PositiveSmallIntegerField(
         "Количество",
-        validators=[MinValueValidator(1, message="Минимальное количество - 1")],
+        validators=[
+            MinValueValidator(
+                MIN_INGREDIENT_AMOUNT, message="Минимальное количество - 1"
+            ),
+            MaxValueValidator(
+                MAX_INGREDIENT_AMOUNT, message="Максимальное количество \
+                    - 32000"
+            ),
+        ],
         help_text="Количество ингредиента.",
     )
 
@@ -144,7 +164,8 @@ class RecipeIngredient(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.ingredient.name} в {self.recipe.name} - {self.amount} {self.ingredient.measurement_unit}"
+        return f"{self.ingredient.name} в {self.recipe.name} - \
+            {self.amount} {self.ingredient.measurement_unit}"
 
 
 class Favorite(models.Model):

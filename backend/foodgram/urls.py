@@ -1,5 +1,5 @@
 """
-URL configuration for foodgram project.
+URL конфигурация.
 """
 
 from django.conf import settings
@@ -13,7 +13,6 @@ urlpatterns = [
     path("api/", include("api.urls")),
 ]
 
-# Spectacular (OpenAPI schema)
 if settings.DEBUG:
     urlpatterns += [
         path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
@@ -24,7 +23,10 @@ if settings.DEBUG:
         ),
     ]
 
-# Serve media files in development
 if settings.DEBUG:
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
-    urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
+    urlpatterns += static(
+        settings.MEDIA_URL, document_root=settings.MEDIA_ROOT
+    )
+    urlpatterns += static(
+        settings.STATIC_URL, document_root=settings.STATIC_ROOT
+    )
